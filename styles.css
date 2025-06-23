@@ -1,0 +1,114 @@
+.itinerario-container {
+    font-family: Arial, sans-serif;
+    border: 2px solid #009CFF;
+    padding: 15px;
+    border-radius: 10px;
+    background-color: #fff;
+}
+.itinerario-title {
+    font-size: 20px;
+    font-weight: bold;
+    text-align: center;
+    margin-bottom: 20px;
+}
+.progreso-general {
+    text-align: center;
+    background-color: #ecfffe;
+    border-radius: 15px;
+    padding: 10px;
+    margin-bottom: 20px;
+}
+.progreso-circle {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    position: relative;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.progreso-text {
+    position: absolute;
+    font-size: 30px;
+    font-weight: bold;
+    color: white;
+}
+.estado-leyenda {
+    margin: 10px 0;
+}
+.estado-item {
+    display: inline-block;
+    margin-right: 10px;
+    font-size: 14px;
+}
+.dot {
+    height: 15px;
+    width: 15px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 20px;
+    justify-content: center;
+}
+.amarillo { background-color: #f7b801; }
+.verde { background-color: #3acc6c; }
+.rojo { background-color: #e63946; }
+
+table.tema-tabla {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+.tema-header {
+    text-align: left;
+    font-weight: bold;
+    background-color: transparent;
+    border-bottom: 2px solid #ccc;
+    padding-bottom: 5px;
+}
+.tema-row {
+    background-color: transparent;
+    border-radius: 5px;
+}
+.tema-col {
+    padding: 10px;
+    vertical-align: top;
+}
+.tema-col span.toggle {
+    cursor: pointer;
+    font-weight: bold;
+}
+.subtemas {
+    font-size: 13px;
+    color: #333;
+    margin-top: 10px;
+    margin-left: 20px;
+}
+.hidden {
+    display: none;
+}
+.check {
+    color: #3acc6c;
+    font-weight: bold;
+}
+.tema-col.dot-col {
+    text-align: center;
+    vertical-align: middle;
+}
+.mensaje-motivacional {
+    background-color: #e8f6ff;
+    border: 2px solid #c5e0f7;
+    color: #0a3d62;
+    padding: 10px;
+    text-align: center;
+    margin: 15px auto;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: bold;
+    animation: fadein 1s;
+}
+
+@keyframes fadein {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
