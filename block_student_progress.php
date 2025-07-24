@@ -18,9 +18,16 @@ class block_student_progress extends block_base
 
         $PAGE->requires->css(new moodle_url('/blocks/student_progress/styles.css'));
 
-        $userlearning = $this->get_user_learning($userid); // Learning type of user
+        $userlearning = $this->get_user_learning($userid);
+        $userlearningid = $userlearning->id;
+        $userlearningname = $userlearning->name;
+        print_object($userlearning);
 
-        list($sections, $progress) = $this->get_user_sections($userid, $courseid);
+        $sections = $this->get_user_sections($userid, $courseid);
+
+        // Verifica si llegan las secciones
+        debugging('Cantidad de secciones encontradas: ' . count($sections), DEBUG_DEVELOPER);
+        print_object($sections);
 
         list($finishsections, $totalsections) = $this->get_progress_data($userid);
 
@@ -86,7 +93,7 @@ class block_student_progress extends block_base
                 "' . $message . '"
             </div>
 
-            <div style="margin-top: 10px;"><strong>Tipo de Aprendizaje</strong><br>' . $userlearning . '</div>
+            <div style="margin-top: 10px;"><strong>Tipo de Aprendizaje</strong><br>' . $userlearningname . '</div>
     
             <div class="estado-leyenda">
                 <strong>Estados</strong><br>
@@ -114,8 +121,9 @@ class block_student_progress extends block_base
             $resources = $this->get_user_resources($userid, $sectionid);
 
             $sectionname = $section->section_name ?: "Tema sin nombre";
-
-            $status = $progress[$sectionid] ?: "Por resolver";
+            print_object($this->get_section_status($userid, $sectionid, $courseid));
+            $status = $this->get_section_status($userid, $sectionid, $courseid) ?: "Por resolver";
+            print_object($status);
 
             if ($status == "Resuelto") {
                 $colorstatus = "dot verde";
@@ -168,7 +176,7 @@ class block_student_progress extends block_base
         global $DB;
 
         try {
-            $sql = "SELECT lt.name as user_learning
+            $sql = "SELECT lt.name, lt.id
                     FROM {learning_type_plg} lt
                     JOIN {user_learning_plg} ul ON lt.id = ul.id_learning
                     JOIN {user} u ON ul.id_user = u.id
@@ -177,10 +185,10 @@ class block_student_progress extends block_base
             $params = ['userid' => $userid];
             $learning = $DB->get_record_sql($sql, $params);
 
-            return $learning ? $learning->user_learning : 'Desconocido';
+            return $learning;
         } catch (Exception $e) {
             debugging('Error en get_user_learning(): ' . $e->getMessage(), DEBUG_DEVELOPER);
-            return 'Desconocido';
+            return [];
         }
     }
 
@@ -203,63 +211,70 @@ class block_student_progress extends block_base
 
             $sections = $DB->get_records_sql($sql, $params);
 
+            return $sections;
+        } catch (Exception $e) {
+            debugging('Error en get_user_sections(): ' . $e->getMessage(), DEBUG_DEVELOPER);
+            return [];
+        }
+    }
 
+    private function get_section_status($userid, $sectionid, $courseid)
+    {
+        global $DB;
 
-            $progress = [];
-
-            foreach ($sections as $sec) {
-                $sectionid = $sec->section_id;
-                debugging('DEBBUG   -->   ' . $sec->section_name);
-                $sql1 = "SELECT 
+        try {
+            $sql1 = "SELECT 
                                 (SELECT COUNT(*) 
                                 FROM {learning_course_module_plg} lcm
                                 JOIN {course_modules} cm ON cm.id = lcm.id_course_module
-                                JOIN {user_learning_module_plg} ulcm ON lcm.id_learning = ulcm.id_learning_course_module
+                                JOIN {user_learning_module_plg} ulcm ON lcm.id = ulcm.id_learning_course_module
                                 JOIN {user_learning_plg} ul ON ulcm.id_user_learning = ul.id
-                                JOIN {user u ON ul.id_user} = u.id
-                                WHERE ulcm.id_user_learning = (
-                                    SELECT ul.id 
-                                    FROM {user_learning_plg} ul 
-                                    JOIN {user} u ON ul.id_user = u.id 
-                                    WHERE u.id = :userid1
-                                )
-                                AND cm.course = :courseid1 AND cm.section = :sectionid) AS total_asignados,
+                                JOIN {user} u ON ul.id_user = u.id
+                                WHERE u.id = :userid1 AND cm.course = :courseid1 AND cm.section = :sectionid1) AS total_asignados,
 
                                 (SELECT COUNT(*) 
                                 FROM {course_modules_completion} cmc
                                 JOIN {learning_course_module_plg} lcm ON lcm.id_course_module = cmc.coursemoduleid
                                 JOIN {course_modules} cm ON cm.id = lcm.id_course_module
-                                JOIN {user_learning_module_plg} ulcm ON lcm.id_learning = ulcm.id_learning_course_module
+                                JOIN {user_learning_module_plg} ulcm ON lcm.id = ulcm.id_learning_course_module
                                 JOIN {user_learning_plg} ul ON ulcm.id_user_learning = ul.id
                                 JOIN {user} u ON ul.id_user = u.id
-                                WHERE cmc.userid = :userid2 AND cm.course = :courseid2 AND cm.section = :sectionid AND cmc.completionstate = 1) AS total_completados
+                                WHERE cmc.userid = :userid2 AND u.id = :userid3 AND cm.course = :courseid2 AND cm.section = :sectionid2 AND cmc.completionstate = 1) AS total_completados
                             ";
 
-                $params1 = [
-                    'userid1' => $userid,
-                    'courseid1' => $courseid,
-                    'userid2' => $userid,
-                    'courseid2' => $courseid,
-                    'sectionid' => $sectionid
-                ];
+            $params1 = [
+                'userid1' => $userid,
+                'courseid1' => $courseid,
+                'userid2' => $userid,
+                'userid3' => $userid,
+                'courseid2' => $courseid,
+                'sectionid1' => $sectionid,
+                'sectionid2' => $sectionid
+            ];
 
-                $studentprogress = $DB->get_record_sql($sql1, $params1);
+            debugging('Antes de la consulta', DEBUG_DEVELOPER);
 
-                $finishresources = (int)($studentprogress->total_completados ?? 0);
-                $totalresources = (int)($studentprogress->total_asignados ?? 0);
+            $studentprogress = $DB->get_record_sql($sql1, $params1);
 
-                if ($finishresources === 0) {
-                    $progress[$sectionid] = 'por resolver';
-                } else if ($finishresources < $totalresources) {
-                    $progress[$sectionid] = 'en progreso';
-                } else {
-                    $progress[$sectionid] = 'resuelto';
-                }
+            debugging('No se encontraron secciones para el usuario ID ' . $studentprogress->total_completados, DEBUG_DEVELOPER);
+            print_object($studentprogress);
+
+            $finishresources = (int)($studentprogress->total_completados ?? 0);
+            $totalresources = (int)($studentprogress->total_asignados ?? 0);
+
+            if ($finishresources === 0) {
+                $progress = 'Por resolver';
+            } else if ($finishresources < $totalresources) {
+                $progress = 'En progreso';
+            } else {
+                $progress = 'Resuelto';
             }
-            return [$sections, $progress];
+            
+            return $progress;
         } catch (Exception $e) {
+            print_object($e->getMessage());
             debugging('Error en get_user_sections(): ' . $e->getMessage(), DEBUG_DEVELOPER);
-            return [[], []];;
+            return null;
         }
     }
 
@@ -424,7 +439,7 @@ class block_student_progress extends block_base
                         (SELECT COUNT(*) 
                              FROM {learning_course_module_plg} lcm
                              JOIN {course_modules} cm ON cm.id = lcm.id_course_module
-                             JOIN {user_learning_module_plg} ulcm ON lcm.id_learning = ulcm.id_learning_course_module
+                             JOIN {user_learning_module_plg} ulcm ON lcm.id = ulcm.id_learning_course_module
                              JOIN {user_learning_plg} ul ON ulcm.id_user_learning = ul.id
                              JOIN {user u ON ul.id_user} = u.id
                              WHERE ulcm.id_user_learning = (
@@ -439,7 +454,7 @@ class block_student_progress extends block_base
                              FROM {course_modules_completion} cmc
                              JOIN {learning_course_module_plg} lcm ON lcm.id_course_module = cmc.coursemoduleid
                              JOIN {course_modules} cm ON cm.id = lcm.id_course_module
-                             JOIN {user_learning_module_plg} ulcm ON lcm.id_learning = ulcm.id_learning_course_module
+                             JOIN {user_learning_module_plg} ulcm ON lcm.id = ulcm.id_learning_course_module
                              JOIN {user_learning_plg} ul ON ulcm.id_user_learning = ul.id
                              JOIN {user} u ON ul.id_user = u.id
                              WHERE cmc.userid = :userid2 AND cm.course = :courseid2 AND cmc.completionstate = 1) AS total_completados
