@@ -389,18 +389,14 @@ class block_student_progress extends block_base
         global $DB;
 
         try {
-            $sql = "SELECT * FROM {course_alerts_plg} ca WHERE ca.id_course = :courseid";
+            $sql = "SELECT ca.alert FROM {course_alerts_plg} ca WHERE ca.id_course = :courseid";
             $params = ['courseid' => $courseid];
             $messages = $DB->get_records_sql($sql, $params);
-
-            $sql = "SELECT COUNT(ca.id_course_alerts) AS total_alerts FROM {course_alerts_plg} ca WHERE ca.id_course = :courseid";
-            $number_alerts = $DB->get_record_sql($sql, $params);
-            $totalalerts = isset($number_alerts->total_alerts) ? (int)$number_alerts->total_alerts : 0;
 
             if (!empty($messages)) {
                 $idcontador = 1;
                 foreach ($messages as $alert) {
-                    $percentage = 100 / $totalalerts;
+                    $percentage = 100 / 4;
                     if ($progress < $percentage * $idcontador) {
                         return $alert->alert;
                     }
@@ -412,9 +408,9 @@ class block_student_progress extends block_base
         }
 
         // Mensajes por defecto
-        if ($progress < 25) return '¡Vamos! Recién comienzas. Cada paso cuenta.';
-        if ($progress < 50) return '¡Buen inicio! Sigue avanzando paso a paso.';
-        if ($progress < 75) return '¡Vas por buen camino! Ya completaste la mitad.';
+        if ($progress < 33.34) return '¡Vamos! Recién comienzas. Cada paso cuenta.';
+        if ($progress < 66.67) return '¡Buen inicio! Sigue avanzando paso a paso.';
+        if ($progress < 100) return '¡Vas por buen camino! Ya completaste la mitad.';
         return '¡Excelente trabajo! Ya casi terminas.';
     }
 
