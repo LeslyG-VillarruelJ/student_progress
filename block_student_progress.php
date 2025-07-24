@@ -21,21 +21,16 @@ class block_student_progress extends block_base
         $userlearning = $this->get_user_learning($userid);
         $userlearningid = $userlearning->id;
         $userlearningname = $userlearning->name;
-        print_object($userlearning);
 
         $sections = $this->get_user_sections($userid, $courseid);
 
         // Verifica si llegan las secciones
         debugging('Cantidad de secciones encontradas: ' . count($sections), DEBUG_DEVELOPER);
-        print_object($sections);
 
-        list($finishsections, $totalsections) = $this->get_progress_data($userid);
+        list($finishsections, $totalsections) = $this->get_section_progress($userid, $sections, $courseid);
 
         // resources Progress
-        list($finishresources, $totalresources) = $this->get_progress_resource($userid, $courseid);
-
-        // Progress (%)
-        $progreso = ($totalresources > 0) ? round(($finishresources * 100) / $totalresources) : 0;
+        $progreso = $this->get_progress_resource($userid, $courseid, $sections);
 
         // motivational message
         $message = $this->get_motivational_message($progreso, $courseid);
@@ -121,17 +116,6 @@ class block_student_progress extends block_base
             $resources = $this->get_user_resources($userid, $sectionid);
 
             $sectionname = $section->section_name ?: "Tema sin nombre";
-            print_object($this->get_section_status($userid, $sectionid, $courseid));
-            $status = $this->get_section_status($userid, $sectionid, $courseid) ?: "Por resolver";
-            print_object($status);
-
-            if ($status == "Resuelto") {
-                $colorstatus = "dot verde";
-            } elseif ($status == "En progreso") {
-                $colorstatus = "dot amarillo";
-            } else {
-                $colorstatus = "dot rojo";
-            }
 
             $html .= '
                 <tr class="tema-row">
@@ -153,6 +137,8 @@ class block_student_progress extends block_base
                 $idcont++;
                 $html .= '<br/>';
             }
+
+            $colorstatus = $this->get_section_color_progress($userid, $sectionid, $courseid);
 
             $html .= '
                         </div>
@@ -198,12 +184,11 @@ class block_student_progress extends block_base
         global $DB;
 
         try {
-            $sql = "SELECT DISTINCT s.id AS section_id, s.name AS section_name FROM {learning_course_module_plg} lcm 
-                        JOIN {course_modules} cm ON cm.id = lcm.id_course_module
+            $sql = "SELECT DISTINCT s.id AS section_id, s.name AS section_name
+                        FROM {user_learning_module_plg} ulm 
+                        JOIN {course_modules} cm ON cm.id = ulm.id_learning_course_module
                         JOIN {course_sections} s ON cm.section = s.id
-                        JOIN {user_learning_module_plg} ulcm ON lcm.id = ulcm.id_learning_course_module
-                        JOIN {user_learning_plg} ul ON ulcm.id_user_learning = ul.id
-                        JOIN {user} u ON ul.id_user = u.id
+                        JOIN {user} u ON ulm.id_user = u.id
                         WHERE u.id = :userid AND cm.course = :courseid
                     ";
 
@@ -224,29 +209,25 @@ class block_student_progress extends block_base
 
         try {
             $sql1 = "SELECT 
-                                (SELECT COUNT(*) 
-                                FROM {learning_course_module_plg} lcm
-                                JOIN {course_modules} cm ON cm.id = lcm.id_course_module
-                                JOIN {user_learning_module_plg} ulcm ON lcm.id = ulcm.id_learning_course_module
-                                JOIN {user_learning_plg} ul ON ulcm.id_user_learning = ul.id
-                                JOIN {user} u ON ul.id_user = u.id
-                                WHERE u.id = :userid1 AND cm.course = :courseid1 AND cm.section = :sectionid1) AS total_asignados,
+                        (SELECT COUNT(*) 
+                             FROM {course_modules} cm
+                             JOIN {user_learning_module_plg} ulcm ON cm.id = ulcm.id_learning_course_module
+                             JOIN {user} u ON ulcm.id_user = u.id
+                             WHERE ulcm.id_user = :userid1 AND cm.course = :courseid1 AND cm.section = :sectionid1
+                        ) AS total_asignados,
 
-                                (SELECT COUNT(*) 
-                                FROM {course_modules_completion} cmc
-                                JOIN {learning_course_module_plg} lcm ON lcm.id_course_module = cmc.coursemoduleid
-                                JOIN {course_modules} cm ON cm.id = lcm.id_course_module
-                                JOIN {user_learning_module_plg} ulcm ON lcm.id = ulcm.id_learning_course_module
-                                JOIN {user_learning_plg} ul ON ulcm.id_user_learning = ul.id
-                                JOIN {user} u ON ul.id_user = u.id
-                                WHERE cmc.userid = :userid2 AND u.id = :userid3 AND cm.course = :courseid2 AND cm.section = :sectionid2 AND cmc.completionstate = 1) AS total_completados
-                            ";
+                        (SELECT COUNT(*) 
+                             FROM {course_modules_completion} cmc
+                             JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
+                             JOIN {user} u ON cmc.userid = u.id
+                             WHERE cmc.userid = :userid2 AND cm.course = :courseid2 AND cmc.completionstate = 1 AND cm.section = :sectionid2
+                        ) AS total_completados;
+                    ";
 
             $params1 = [
                 'userid1' => $userid,
                 'courseid1' => $courseid,
                 'userid2' => $userid,
-                'userid3' => $userid,
                 'courseid2' => $courseid,
                 'sectionid1' => $sectionid,
                 'sectionid2' => $sectionid
@@ -254,55 +235,82 @@ class block_student_progress extends block_base
 
             debugging('Antes de la consulta', DEBUG_DEVELOPER);
 
-            $studentprogress = $DB->get_record_sql($sql1, $params1);
+            $sectionprogress = $DB->get_record_sql($sql1, $params1);
 
-            debugging('No se encontraron secciones para el usuario ID ' . $studentprogress->total_completados, DEBUG_DEVELOPER);
-            print_object($studentprogress);
+            $finishresources = isset($sectionprogress->total_completados) ? (int)$sectionprogress->total_completados : 0;
+            $totalresources = isset($sectionprogress->total_asignados) ? (int)$sectionprogress->total_asignados : 0;
 
-            $finishresources = (int)($studentprogress->total_completados ?? 0);
-            $totalresources = (int)($studentprogress->total_asignados ?? 0);
-
-            if ($finishresources === 0) {
-                $progress = 'Por resolver';
-            } else if ($finishresources < $totalresources) {
-                $progress = 'En progreso';
-            } else {
-                $progress = 'Resuelto';
-            }
-            
-            return $progress;
+            return [$finishresources, $totalresources];
         } catch (Exception $e) {
-            print_object($e->getMessage());
             debugging('Error en get_user_sections(): ' . $e->getMessage(), DEBUG_DEVELOPER);
             return null;
         }
     }
 
-    // Get finished task
-    private function get_progress_data($userid)
+    // Get percentage of progress
+    private function get_progress_resource($userid, $courseid, $sections)
     {
-        global $DB;
-
         try {
-            $sql = "SELECT 
-                        SUM(CASE WHEN us.status = 'Resuelto' THEN 1 ELSE 0 END) AS secciones_resueltas,
-                        COUNT(us.id_user_section) AS total_secciones
-                    FROM {user_sections_plg} us
-                    JOIN {user_learning_plg} ul ON us.id_user_learning = ul.id_user_learning
-                    JOIN {user} u ON ul.id_user = u.id
-                    WHERE u.id = :userid";
+            $addtotalresources = 0;
+            $addfinishresources = 0;
 
-            $params = ['userid' => $userid];
-            $numbersections = $DB->get_record_sql($sql, $params);
+            foreach ($sections as $section) {
+                $sectionid = $section->section_id ?: 0;
+                list($finishresources, $totalresources) = $this->get_section_status($userid, $sectionid, $courseid);
+                $addtotalresources += $totalresources;
+                $addfinishresources += $finishresources;
+            }
 
-            $finishsections = isset($numbersections->secciones_resueltas) ? (int)$numbersections->secciones_resueltas : 0;
-            $totalsections = isset($numbersections->total_secciones) ? (int)$numbersections->total_secciones : 0;
+            return ($addtotalresources > 0) ? round(($addfinishresources * 100) / $addtotalresources) : 0;;
+        } catch (Exception $e) {
+            debugging('Error en get_progress_resource(): ' . $e->getMessage(), DEBUG_DEVELOPER);
+            return 0;
+        }
+    }
+
+    // Get finished task
+    private function get_section_progress($userid, $sections, $courseid)
+    {
+        try {
+            $finishsections = 0;
+            $totalsections = 0;
+            foreach ($sections as $section) {
+                $sectionid = $section->section_id ?: 0;
+                list($finishresources, $totalresources) = $this->get_section_status($userid, $sectionid, $courseid);
+
+                if ($totalresources === $finishresources) {
+                    $finishsections += 1;
+                }
+
+                $totalsections += 1;
+            }
 
             return [$finishsections, $totalsections];
         } catch (Exception $e) {
             debugging('Error en get_progress_data(): ' . $e->getMessage(), DEBUG_DEVELOPER);
             return [0, 0];
         }
+    }
+
+    private function get_section_color_progress($userid, $sectionid, $courseid)
+    {
+        $colorstatus = "dot rojo";
+
+        try {
+            list($finishresources, $totalresources) = $this->get_section_status($userid, $sectionid, $courseid);
+
+            if ($totalresources === $finishresources) {
+                $colorstatus = "dot verde";
+            } elseif ($totalresources > $finishresources && $finishresources >= 1) {
+                $colorstatus = "dot amarillo";
+            } else {
+                $colorstatus = "dot rojo";
+            }
+        } catch (Exception $e) {
+            debugging('Error en get_progress_data(): ' . $e->getMessage(), DEBUG_DEVELOPER);
+        }
+
+        return $colorstatus;
     }
 
 
@@ -339,35 +347,34 @@ class block_student_progress extends block_base
                             WHEN 'workshop' THEN wk.name
                             ELSE 'Desconocido'
                         END AS nombre_actividad
-                    FROM {course_modules} cm
-                    JOIN {course_sections} cs ON cm.section = cs.id
-                    JOIN {learning_course_module_plg} lcm ON cm.id = lcm.id_course_module
-                    JOIN {user_learning_module_plg} ulcm ON lcm.id = ulcm.id_learning_course_module
-                    JOIN {user_learning_plg} ul ON ulcm.id_user_learning = ul.id
-                    JOIN {user} us ON ul.id_user = us.id
-                    JOIN {modules} m ON cm.module = m.id
-                    LEFT JOIN {assign} a ON a.id = cm.instance AND m.name = 'assign'
-                    LEFT JOIN {book} b ON b.id = cm.instance AND m.name = 'book'
-                    LEFT JOIN {chat} ch ON ch.id = cm.instance AND m.name = 'chat'
-                    LEFT JOIN {choice} chs ON chs.id = cm.instance AND m.name = 'choice'
-                    LEFT JOIN {data} d ON d.id = cm.instance AND m.name = 'data'
-                    LEFT JOIN {feedback} f ON f.id = cm.instance AND m.name = 'feedback'
-                    LEFT JOIN {folder} fo ON fo.id = cm.instance AND m.name = 'folder'
-                    LEFT JOIN {forum} fm ON fm.id = cm.instance AND m.name = 'forum'
-                    LEFT JOIN {glossary} g ON g.id = cm.instance AND m.name = 'glossary'
-                    LEFT JOIN {h5pactivity} h ON h.id = cm.instance AND m.name = 'h5pactivity'
-                    LEFT JOIN {imscp} i ON i.id = cm.instance AND m.name = 'imscp'
-                    LEFT JOIN {label} l ON l.id = cm.instance AND m.name = 'label'
-                    LEFT JOIN {lesson} le ON le.id = cm.instance AND m.name = 'lesson'
-                    LEFT JOIN {page} p ON p.id = cm.instance AND m.name = 'page'
-                    LEFT JOIN {quiz} q ON q.id = cm.instance AND m.name = 'quiz'
-                    LEFT JOIN {resource} r ON r.id = cm.instance AND m.name = 'resource'
-                    LEFT JOIN {scorm} s ON s.id = cm.instance AND m.name = 'scorm'
-                    LEFT JOIN {survey} sv ON sv.id = cm.instance AND m.name = 'survey'
-                    LEFT JOIN {url} u ON u.id = cm.instance AND m.name = 'url'
-                    LEFT JOIN {wiki} w ON w.id = cm.instance AND m.name = 'wiki'
-                    LEFT JOIN {workshop} wk ON wk.id = cm.instance AND m.name = 'workshop'
-                    WHERE us.id = :userid AND cs.id = :sectionid";
+                        FROM {course_modules} cm
+                        JOIN {course_sections} cs ON cm.section = cs.id
+                        JOIN {user_learning_module_plg} ulcm ON cm.id = ulcm.id_learning_course_module
+                        JOIN {user} us ON ulcm.id_user = us.id
+                        JOIN {modules} m ON cm.module = m.id
+                        LEFT JOIN {assign} a ON a.id = cm.instance AND m.name = 'assign'
+                        LEFT JOIN {book} b ON b.id = cm.instance AND m.name = 'book'
+                        LEFT JOIN {chat} ch ON ch.id = cm.instance AND m.name = 'chat'
+                        LEFT JOIN {choice} chs ON chs.id = cm.instance AND m.name = 'choice'
+                        LEFT JOIN {data} d ON d.id = cm.instance AND m.name = 'data'
+                        LEFT JOIN {feedback} f ON f.id = cm.instance AND m.name = 'feedback'
+                        LEFT JOIN {folder} fo ON fo.id = cm.instance AND m.name = 'folder'
+                        LEFT JOIN {forum} fm ON fm.id = cm.instance AND m.name = 'forum'
+                        LEFT JOIN {glossary} g ON g.id = cm.instance AND m.name = 'glossary'
+                        LEFT JOIN {h5pactivity} h ON h.id = cm.instance AND m.name = 'h5pactivity'
+                        LEFT JOIN {imscp} i ON i.id = cm.instance AND m.name = 'imscp'
+                        LEFT JOIN {label} l ON l.id = cm.instance AND m.name = 'label'
+                        LEFT JOIN {lesson} le ON le.id = cm.instance AND m.name = 'lesson'
+                        LEFT JOIN {page} p ON p.id = cm.instance AND m.name = 'page'
+                        LEFT JOIN {quiz} q ON q.id = cm.instance AND m.name = 'quiz'
+                        LEFT JOIN {resource} r ON r.id = cm.instance AND m.name = 'resource'
+                        LEFT JOIN {scorm} s ON s.id = cm.instance AND m.name = 'scorm'
+                        LEFT JOIN {survey} sv ON sv.id = cm.instance AND m.name = 'survey'
+                        LEFT JOIN {url} u ON u.id = cm.instance AND m.name = 'url'
+                        LEFT JOIN {wiki} w ON w.id = cm.instance AND m.name = 'wiki'
+                        LEFT JOIN {workshop} wk ON wk.id = cm.instance AND m.name = 'workshop'
+                        WHERE us.id = :userid AND cs.id = :sectionid
+                    ";
 
             $params = ['userid' => $userid, 'sectionid' => $sectionid];
             return $DB->get_records_sql($sql, $params);
@@ -427,49 +434,5 @@ class block_student_progress extends block_base
         $formattedname = format_string($resourcename, true, ['context' => $context]);
 
         return html_writer::tag('div', html_writer::link($url, $formattedname, ['target' => '_blank']));
-    }
-
-    // Get finished task
-    private function get_progress_resource($userid, $courseid)
-    {
-        global $DB;
-
-        try {
-            $sql = "SELECT 
-                        (SELECT COUNT(*) 
-                             FROM {learning_course_module_plg} lcm
-                             JOIN {course_modules} cm ON cm.id = lcm.id_course_module
-                             JOIN {user_learning_module_plg} ulcm ON lcm.id = ulcm.id_learning_course_module
-                             JOIN {user_learning_plg} ul ON ulcm.id_user_learning = ul.id
-                             JOIN {user u ON ul.id_user} = u.id
-                             WHERE ulcm.id_user_learning = (
-                                 SELECT ul.id 
-                                 FROM {user_learning_plg} ul 
-                                 JOIN {user} u ON ul.id_user = u.id 
-                                 WHERE u.id = :userid1
-                             )
-                             AND cm.course = :courseid1) AS total_asignados,
-
-                        (SELECT COUNT(*) 
-                             FROM {course_modules_completion} cmc
-                             JOIN {learning_course_module_plg} lcm ON lcm.id_course_module = cmc.coursemoduleid
-                             JOIN {course_modules} cm ON cm.id = lcm.id_course_module
-                             JOIN {user_learning_module_plg} ulcm ON lcm.id = ulcm.id_learning_course_module
-                             JOIN {user_learning_plg} ul ON ulcm.id_user_learning = ul.id
-                             JOIN {user} u ON ul.id_user = u.id
-                             WHERE cmc.userid = :userid2 AND cm.course = :courseid2 AND cmc.completionstate = 1) AS total_completados
-                    ";
-
-            $params = ['userid1' => $userid, 'courseid1' => $courseid, 'userid2' => $userid, 'courseid2' => $courseid];
-            $numberresources = $DB->get_record_sql($sql, $params);
-
-            $finishresources = isset($numberresources->total_completados) ? (int)$numberresources->total_completados : 0;
-            $totalresources = isset($numberresources->total_asignados) ? (int)$numberresources->total_asignados : 0;
-
-            return [$finishresources, $totalresources];
-        } catch (Exception $e) {
-            debugging('Error en get_progress_resource(): ' . $e->getMessage(), DEBUG_DEVELOPER);
-            return [0, 0];
-        }
     }
 }
