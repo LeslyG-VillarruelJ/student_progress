@@ -237,33 +237,35 @@ class block_student_progress extends block_base
         }
     }
 
-    private function get_section_status($userid, $sectionid, $courseid)
+    private function get_section_status($userid, $sectionid)
     {
         global $DB;
 
         try {
             $sql1 = "SELECT 
-                        (SELECT COUNT(*) 
+                        (SELECT COUNT(*)
                              FROM {course_modules} cm
                              JOIN {user_learning_module_plg} ulcm ON cm.id = ulcm.id_learning_course_module
                              JOIN {user} u ON ulcm.id_user = u.id
                              WHERE ulcm.id_user = :userid1 AND cm.course = :courseid1 AND cm.section = :sectionid1
                         ) AS total_asignados,
 
-                        (SELECT COUNT(*) 
+                        (SELECT COUNT(*)
                              FROM {course_modules_completion} cmc
                              JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
-                             JOIN {user} u ON cmc.userid = u.id
-                             WHERE cmc.userid = :userid2 AND cm.course = :courseid2 AND cmc.completionstate = 1 AND cm.section = :sectionid2
-                        ) AS total_completados;
+                             JOIN {user_learning_module_plg} ulcm ON cmc.coursemoduleid = ulcm.id_learning_course_module
+                             JOIN {user} u ON ulcm.id_user = u.id
+                             WHERE u.id = :userid2 AND cmc.userid = :userid3 AND cm.course = 3 AND cmc.completionstate = 1 AND cm.section = :sectionid2
+                        ) AS total_completados;;
                     ";
 
             $params1 = [
                 'userid1' => $userid,
-                'courseid1' => $courseid,
+                'courseid1' => $this->courseid,
                 'userid2' => $userid,
-                'courseid2' => $courseid,
+                'courseid2' => $this->courseid,
                 'sectionid1' => $sectionid,
+                'userid3' => $userid,
                 'sectionid2' => $sectionid
             ];
 
