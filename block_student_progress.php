@@ -8,65 +8,23 @@ class block_student_progress extends block_base
         $this->title = get_string('pluginname', 'block_student_progress');
     }
 
-    public function applicable_formats()
-    {
-        global $USER;
-
-        // Obtener el contexto del sistema
-        $context = context_system::instance();
-
-        // Verificar si el usuario es administrador
-        $isadmin = is_siteadmin($USER);
-
-        // Verificar si el usuario tiene el rol de estudiante en algún contexto
-        $roles = get_user_roles($context, $USER->id, true);
-        $hasstudentrole = false;
-
-        foreach ($roles as $role) {
-            if ($role->shortname === 'student') {
-                $hasstudentrole = true;
-                break;
-            }
-        }
-
-        // Mostrar solo a estudiantes y administradores en vista de curso
-        if ($isadmin || $hasstudentrole) {
-            return ['course-view' => true];
-        }
-
-        // Ocultar para otros roles
-        return ['course-view' => false];
-    }
-
     public function get_content()
     {
-        global $COURSE, $USER, $DB, $OUTPUT, $PAGE;
+        global $USER, $COURSE, $DB, $PAGE;
 
+        // Si ya hay contenido, retornarlo.
         if ($this->content !== null) {
             return $this->content;
         }
 
-        $this->content = new stdClass();
-        $this->content->text = '';
-        $this->content->footer = '';
-
+        // Verifica si el usuario tiene rol de profesor o admin en el curso.
         $context = context_course::instance($COURSE->id);
-
-        // Mostrar solo a estudiantes y administradores
-        $isadmin = is_siteadmin($USER);
-
-        $roles = get_user_roles($context, $USER->id, true);
-        $hasstudentrole = false;
-
-        foreach ($roles as $role) {
-            if ($role->shortname === 'student') {
-                $hasstudentrole = true;
-                break;
-            }
-        }
-
-        if (!$isadmin && !$hasstudentrole) {
-            return null;
+        if (has_capability('moodle/course:update', $context, $USER->id)) {
+            // Profesor o administrador: no mostrar el bloque.
+            $this->content = new stdClass();
+            $this->content->text = '';
+            $this->content->footer = '';
+            return $this->content;
         }
 
         $coursename = format_string($COURSE->fullname);
@@ -184,9 +142,9 @@ class block_student_progress extends block_base
         $html .= '</table>
         </div>';
 
+        $this->content = new stdClass();
         $this->content->text = $html;
         $this->content->footer = '';
-
         return $this->content;
     }
 
@@ -237,7 +195,7 @@ class block_student_progress extends block_base
         }
     }
 
-    private function get_section_status($userid, $sectionid)
+    private function get_section_status($userid, $sectionid, $courseid)
     {
         global $DB;
 
@@ -261,9 +219,9 @@ class block_student_progress extends block_base
 
             $params1 = [
                 'userid1' => $userid,
-                'courseid1' => $this->courseid,
+                'courseid1' => $courseid,
                 'userid2' => $userid,
-                'courseid2' => $this->courseid,
+                'courseid2' => $courseid,
                 'sectionid1' => $sectionid,
                 'userid3' => $userid,
                 'sectionid2' => $sectionid
