@@ -8,9 +8,66 @@ class block_student_progress extends block_base
         $this->title = get_string('pluginname', 'block_student_progress');
     }
 
+    public function applicable_formats()
+    {
+        global $USER;
+
+        // Obtener el contexto del sistema
+        $context = context_system::instance();
+
+        // Verificar si el usuario es administrador
+        $isadmin = is_siteadmin($USER);
+
+        // Verificar si el usuario tiene el rol de estudiante en algún contexto
+        $roles = get_user_roles($context, $USER->id, true);
+        $hasstudentrole = false;
+
+        foreach ($roles as $role) {
+            if ($role->shortname === 'student') {
+                $hasstudentrole = true;
+                break;
+            }
+        }
+
+        // Mostrar solo a estudiantes y administradores en vista de curso
+        if ($isadmin || $hasstudentrole) {
+            return ['course-view' => true];
+        }
+
+        // Ocultar para otros roles
+        return ['course-view' => false];
+    }
+
     public function get_content()
     {
-        global $COURSE, $USER, $DB, $PAGE;
+        global $COURSE, $USER, $DB, $OUTPUT, $PAGE;
+
+        if ($this->content !== null) {
+            return $this->content;
+        }
+
+        $this->content = new stdClass();
+        $this->content->text = '';
+        $this->content->footer = '';
+
+        $context = context_course::instance($COURSE->id);
+
+        // Mostrar solo a estudiantes y administradores
+        $isadmin = is_siteadmin($USER);
+
+        $roles = get_user_roles($context, $USER->id, true);
+        $hasstudentrole = false;
+
+        foreach ($roles as $role) {
+            if ($role->shortname === 'student') {
+                $hasstudentrole = true;
+                break;
+            }
+        }
+
+        if (!$isadmin && !$hasstudentrole) {
+            return null;
+        }
 
         $coursename = format_string($COURSE->fullname);
         $courseid = $COURSE->id;
@@ -24,29 +81,12 @@ class block_student_progress extends block_base
 
         $sections = $this->get_user_sections($userid, $courseid);
 
-        // Verifica si llegan las secciones
-        debugging('Cantidad de secciones encontradas: ' . count($sections), DEBUG_DEVELOPER);
-
         list($finishsections, $totalsections) = $this->get_section_progress($userid, $sections, $courseid);
 
-        // resources Progress
         $progreso = $this->get_progress_resource($userid, $courseid, $sections);
 
-        // motivational message
         $message = $this->get_motivational_message($progreso, $courseid);
         $duration = 20000;
-
-        if ($this->content !== null) {
-            return $this->content;
-        }
-
-        $this->content = new stdClass();
-
-        if (empty($sections)) {
-            debugging('No se encontraron secciones para el usuario ID ' . $userid . ' en el curso ID ' . $courseid, DEBUG_DEVELOPER);
-        } else {
-            debugging('Se encontraron ' . count($sections) . ' secciones.', DEBUG_DEVELOPER);
-        }
 
         $html = '
         <script>
@@ -105,13 +145,7 @@ class block_student_progress extends block_base
 
         $idcontador = 1;
         foreach ($sections as $section) {
-            debugging('Procesando sección: ID = ' . $section->section_id . ', Nombre = ' . $section->section_name, DEBUG_DEVELOPER);
             $sectionid = $section->section_id ?: 0;
-
-            if (!$sectionid) {
-                debugging('Sección sin ID. Se omite.', DEBUG_DEVELOPER);
-                continue;
-            }
 
             $resources = $this->get_user_resources($userid, $sectionid);
 
