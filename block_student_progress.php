@@ -213,7 +213,7 @@ class block_student_progress extends block_base
                              JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
                              JOIN {user_learning_module_plg} ulcm ON cmc.coursemoduleid = ulcm.id_learning_course_module
                              JOIN {user} u ON ulcm.id_user = u.id
-                             WHERE u.id = :userid2 AND cmc.userid = :userid3 AND cm.course = 3 AND cmc.completionstate = 1 AND cm.section = :sectionid2
+                             WHERE u.id = :userid2 AND cmc.userid = :userid3 AND cm.course = :courseid2 AND cmc.completionstate = 1 AND cm.section = :sectionid2
                         ) AS total_completados;;
                     ";
 
